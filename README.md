@@ -127,6 +127,45 @@ To use this, `--strict` must be used with `--source=`:
 
 ```bash
 ./mo --strict --source=.env my-template.mustache
+
+
+Enhancements
+-----------
+
+In addition to many of the features built-in to Mustache, `mo` includes a number of unique features that make it a bit more powerful.
+
+#### Loop @key and @index
+
+`mo` implements Handlebar's `@key` and `@index` references for outputting the key inside of a loop:
+
+Env:
+```bash
+myarr=( foo bar )
+
+# Bash v4+
+declare -A myassoc
+myassoc[hello]="mo"
+myassoc[world]="is great"
+```
+
+Template:
+```handlebars
+{{#myarr}}
+ - {{@}} {{.}}
+{{/myarr}}
+
+{{#myassoc}}
+ * {{@}} {{.}}
+{{/myassoc}}
+```
+
+Output:
+```markdown
+ - 0 foo
+ - 1 bar
+
+ * hello mo
+ * world is great
 ```
 
 
