@@ -291,18 +291,23 @@ moFindEndTag() {
 }
 
 
-# Internal: Find the first index of a substring.  If not found, sets the
-# index to -1.
+# Internal: Find the index of a substring.  If not found, sets the
+# index to -1. Defaults to finding the first index.
 #
 # $1 - Destination variable for the index
 # $2 - Haystack
 # $3 - Needle
+# $4 - Last occurrence of needle
 #
 # Returns nothing.
 moFindString() {
     local pos string
 
-    string=${2%%"$3"*}
+    if [[ "$4" == "true" ]]; then
+        string=${2%"$3"*}
+    else
+        string=${2%%"$3"*}
+    fi
     [[ "$string" == "$2" ]] && pos=-1 || pos=${#string}
     local "$1" && moIndirect "$1" "$pos"
 }
@@ -658,9 +663,10 @@ moLoop() {
 
 # Internal: Parse a block of text, writing the result to stdout.
 #
-# $1 - Block of text to change
+# $1 - Block of text to parse
 # $2 - Current name (the variable NAME for what {{.}} means)
 # $3 - true when no content before this, false otherwise
+# $4 - true if subexpression
 #
 # Returns nothing.
 moParse() {
@@ -672,11 +678,33 @@ moParse() {
     moIsBeginning=$3
 
     # Find open tags
-    moSplit moContent "$1" '{{' '}}'
+    if [[ "$4" == "true" ]]; then
+        moSplit moContent "$1" '(' ')' true
+    else
+        moSplit moContent "$1" '{{' '}}'
+    fi
+
 
     while [[ "${#moContent[@]}" -gt 1 ]]; do
         moTrimWhitespace moTag "${moContent[1]}"
         moNextIsBeginning=false
+
+        if [[ ! "$moTag" == ">"* ]] && [[ "${moContent[1]}" =~ "(" ]]; then
+            #echo -e "\n" >&2
+            #echo "!!!!!!!!!!!! BEFORE ${moContent[1]}" >&2
+            moParsed=$(moParse "${moContent[1]}" "$moCurrent" true true)
+            #echo "%%%%%%%%%%%% AFTER ${moParsed[@]}" >&2
+            moContent[1]=$moParsed
+            #echo "!!!!!!!!!!!! AFTER ${moContent[@]}" >&2
+            #echo "" >&2
+            #moTrimWhitespace moTag "${moContent[1]}"
+            moTrimWhitespace moTag "${moContent[1]}"
+        fi
+
+        #if [[ "${#moContent[@]}" -gt 2 ]]; then
+        #    local moInner=($(moParse "${moContent[@]:1}" "$moCurrent" true true))
+        #    moContent=(${moContent[0]} ${moInner[@]})
+        #fi
 
         case $moTag in
             '#'*)
@@ -920,31 +948,33 @@ moShow() {
 # $2 - String to split
 # $3 - Starting delimiter
 # $4 - Ending delimiter (optional)
+# $5 - Find ending delimiter at end
 #
 # Returns nothing.
 moSplit() {
-    local pos result
+    local moPos moResult moEnd
 
-    result=( "$2" )
-    moFindString pos "${result[0]}" "$3"
+    moResult=( "$2" )
+    moFindString moPos "${moResult[0]}" "$3"
+    moEnd=$5
 
-    if [[ "$pos" -ne -1 ]]; then
+    if [[ "$moPos" -ne -1 ]]; then
         # The first delimiter was found
-        result[1]=${result[0]:$pos + ${#3}}
-        result[0]=${result[0]:0:$pos}
+        moResult[1]=${moResult[0]:$moPos + ${#3}}
+        moResult[0]=${moResult[0]:0:$moPos}
 
         if [[ -n "${4-}" ]]; then
-            moFindString pos "${result[1]}" "$4"
+            moFindString moPos "${moResult[1]}" "$4" $moEnd
 
-            if [[ "$pos" -ne -1 ]]; then
+            if [[ "$moPos" -ne -1 ]]; then
                 # The second delimiter was found
-                result[2]="${result[1]:$pos + ${#4}}"
-                result[1]="${result[1]:0:$pos}"
+                moResult[2]="${moResult[1]:$moPos + ${#4}}"
+                moResult[1]="${moResult[1]:0:$moPos}"
             fi
         fi
     fi
 
-    local "$1" && moIndirectArray "$1" "${result[@]}"
+    local "$1" && moIndirectArray "$1" "${moResult[@]}"
 }
 
 

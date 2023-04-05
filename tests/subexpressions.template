@@ -1,0 +1,7 @@
+X: {{x}}
+Function: {{quote (x)}}
+Specific Element: {{repo.(i)}}
+Loop:
+{{#(x)}}
+  <b>{{double_quote (quote (.))}} {{.}}</b>
+{{/(x)}}
