@@ -186,19 +186,20 @@ mo() (
 #
 # Returns nothing.
 moCallFunction() {
-    local moArgs moContent moFunctionArgs moFunctionResult
+    local moArgs moContent moFunctionResult moEscaped
 
-    moArgs=()
-    moTrimWhitespace moFunctionArgs "$4"
+    moTrimWhitespace moArgs "$4"
+    moParseArgs moArgs "$moArgs"
 
+    eval "MO_FUNCTION_ARGS=(${moArgs[@]})"
     # shellcheck disable=SC2031
-    if [[ -n "${MO_ALLOW_FUNCTION_ARGUMENTS-}" ]]; then
+    if [[ ! -n "${MO_ALLOW_FUNCTION_ARGUMENTS-}" ]]; then
         # Intentionally bad behavior
         # shellcheck disable=SC2206
-        moArgs=($4)
+        moArgs=()
     fi
 
-    moContent=$(echo -n "$3" | MO_FUNCTION_ARGS="$moFunctionArgs" eval "$2" "${moArgs[@]}") || {
+    moContent=$(echo -n "$3" | eval "$2" "${moArgs[@]}") || {
         moFunctionResult=$?
         # shellcheck disable=SC2031
         if [[ -n "${MO_FAIL_ON_FUNCTION-}" && "$moFunctionResult" != 0 ]]; then
@@ -209,6 +210,48 @@ moCallFunction() {
 
     # shellcheck disable=SC2031
     local "$1" && moIndirect "$1" "$moContent"
+}
+
+moParseArgs() {
+    local moRawArgs moResultArgs moQuoteOpen moMultiWord
+    moRawArgs=($2)
+    moResultArgs=()
+
+    moQuoteOpen=""
+    moMultiWord=""
+    for word in "${moRawArgs[@]}"; do
+        if [[ ! -z "$moQuoteOpen" ]]; then
+            if [[ "${word: -1}" == "$moQuoteOpen" ]] && [[ "${word: -2:1}" != "\\" ]]; then
+                moMultiWord+=" ${word%?}"
+                moResultArgs+=("\"$moMultiWord\"")
+                moQuoteOpen=""
+            else
+                moMultiWord+=" $word"
+            fi
+            continue
+        fi
+
+        if [[ "${word:0:1}" == "\"" ]] || [[ "${word:0:1}" == "'" ]]; then
+            moQuoteOpen="${word:0:1}"
+            moMultiWord="${word:1}"
+
+            if [[ "${word: -1}" == "$moQuoteOpen" ]] && [[ "${word: -2:1}" != "\\" ]]; then
+                moResultArgs+=("\"${moMultiWord%?}\"")
+                moQuoteOpen=""
+            fi
+            continue
+        fi
+
+        moMultiWord=$(moParse "{{$word}}" "" true)
+        moResultArgs+=("\"$moMultiWord\"")
+    done
+
+    if [[ ! -z "$moQuoteOpen" ]]; then
+        moMultiWord+=("$word")
+        moResultArgs+=("${moMultiWord[@]}")
+    fi
+
+    local "$1" && moIndirectArray "$1" "${moResultArgs[@]}"
 }
 
 
